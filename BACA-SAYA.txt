@@ -1,0 +1,6 @@
+CARA MEMBUAT APK KANTONG (tanpa Android Studio)
+1. Buat akun di github.com (gratis), lalu buat repository baru (misal: kantong).
+2. Upload SEMUA isi folder ini ke repository, termasuk folder .github (di laptop, drag-and-drop folder ke halaman repository).
+3. Buka tab "Actions" > pilih "Build APK" > klik "Run workflow". Tunggu sekitar 5 menit sampai centang hijau.
+4. Klik hasil run tersebut, di bagian Artifacts unduh "kantong-apk" (berupa zip), ekstrak, ambil app-debug.apk.
+5. Kirim ke HP, buka file APK, izinkan "install dari sumber tidak dikenal", lalu Install.
