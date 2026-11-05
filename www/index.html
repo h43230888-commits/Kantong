@@ -36,6 +36,7 @@ button{cursor:pointer;border:0;background:none}
 .card h2 button{font-size:13px;color:var(--in);font-weight:600}
 .bar{height:10px;border-radius:99px;background:var(--chip);overflow:hidden}
 .bar i{display:block;height:100%;border-radius:99px;background:var(--in);transition:width .4s}
+.dly{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}.dly .row{display:flex;justify-content:space-between;align-items:baseline}.dly .row small{color:var(--mute);font-weight:600}.dly b{font-size:20px;font-variant-numeric:tabular-nums}
 .bmeta{display:flex;justify-content:space-between;font-size:13px;color:var(--mute);margin-top:8px}
 .cat{display:flex;align-items:center;gap:10px;margin:10px 0}
 .cat .ic{width:34px;height:34px;border-radius:11px;background:var(--chip);display:grid;place-items:center;font-size:17px;flex:none}
@@ -125,6 +126,11 @@ textarea.field{height:120px;font-size:12px;font-family:ui-monospace,monospace}
     <div id="budgetBody"></div>
   </div>
 
+  <div class="card" id="overCard">
+    <h2>Tanggal melebihi budget</h2>
+    <div id="overBody"></div>
+  </div>
+
   <div class="card" id="catCard">
     <h2>Ke mana uangmu pergi</h2>
     <div id="catBody"></div>
@@ -167,6 +173,8 @@ textarea.field{height:120px;font-size:12px;font-family:ui-monospace,monospace}
   <h3>Batas pengeluaran bulanan</h3>
   <p class="note">Kamu akan diingatkan lewat bar warna saat pengeluaran mendekati batas. Kosongkan untuk mematikan.</p>
   <input class="field" id="budIn" inputmode="numeric" placeholder="Contoh: 3.000.000">
+  <label class="l">Batas per kategori (opsional, kosongkan jika tidak perlu)</label>
+  <div id="cbList"></div>
   <div class="acts"><button class="btn g" data-close>Batal</button><button class="btn" id="budSave">Simpan</button></div>
 </div></div>
 
@@ -191,7 +199,7 @@ const $=id=>document.getElementById(id);
 const WN={rek:"Rekening",cash:"Cash"};let curW="rek";
 let S={tx:[],budget:0};
 try{const r=localStorage.getItem("kantong:v1");if(r){const p=JSON.parse(r);if(p&&Array.isArray(p.tx))S=p}}catch(e){}
-S.open=S.open||{rek:0,cash:0};S.tx.forEach(t=>{if(!t.w)t.w="rek"});
+S.cb=S.cb||{};S.open=S.open||{rek:0,cash:0};S.tx.forEach(t=>{if(!t.w)t.w="rek"});
 function save(){try{localStorage.setItem("kantong:v1",JSON.stringify(S))}catch(e){}}
 try{const th=localStorage.getItem("kantong:theme");if(th)document.documentElement.dataset.theme=th}catch(e){}
 
@@ -220,13 +228,14 @@ function render(){
   if(S.budget>0){
     const p=tout/S.budget,pc=Math.min(p*100,100),c=p>=1?"var(--out)":p>=.8?"var(--warn)":"var(--in)";
     const left=S.budget-tout;
-    bb.innerHTML=`<div class="bar"><i style="width:${pc}%;background:${c}"></i></div><div class="bmeta"><span>${Math.round(p*100)}% terpakai</span><span>${left>=0?"Sisa "+rp(left):"Lebih "+rp(-left)}</span></div>`;
+    bb.innerHTML=`<div class="bar"><i style="width:${pc}%;background:${c}"></i></div><div class="bmeta"><span>${Math.round(p*100)}% terpakai</span><span>${left>=0?"Sisa "+rp(left):"Lebih "+rp(-left)}</span></div>`+daily(key,mt,tout);
   }else bb.innerHTML=`<div class="note" style="margin:0">Belum diatur. Tentukan batas agar pengeluaranmu terkendali.</div>`;
 
+  renderOver(key,mt);
   // categories
   const by={};mt.filter(t=>t.t==="out").forEach(t=>{by[t.c]=(by[t.c]||0)+t.a});
-  const arr=Object.entries(by).sort((a,b)=>b[1]-a[1]);
-  $("catBody").innerHTML=arr.length?arr.map(([c,v])=>{const e=CATS.out.find(x=>x[1]===c)||["📦",c];return `<div class="cat"><div class="ic">${e[0]}</div><div class="mid"><div class="nm"><span>${esc(c)}</span><span>${rp(v)}</span></div><div class="bar"><i style="width:${v/tout*100}%"></i></div></div></div>`}).join(""):`<div class="note" style="margin:0">Belum ada pengeluaran bulan ini.</div>`;
+  const arr=(Object.keys(S.cb).forEach(k=>{if(!(k in by))by[k]=0}),Object.entries(by).sort((a,b)=>b[1]-a[1]));
+  $("catBody").innerHTML=arr.length?arr.map(([c,v])=>{const e=CATS.out.find(x=>x[1]===c)||["📦",c];return `<div class="cat"><div class="ic">${e[0]}</div><div class="mid"><div class="nm"><span>${esc(c)}</span><span>${rp(v)}${S.cb[c]?" / "+rp(S.cb[c]):""}</span></div><div class="bar"><i style="width:${S.cb[c]?Math.min(v/S.cb[c]*100,100):(tout?v/tout*100:0)}%;${S.cb[c]?"background:"+(v>=S.cb[c]?"var(--out)":v>=S.cb[c]*.8?"var(--warn)":"var(--in)"):""}"></i></div>${catNote(c,v)}</div></div>`}).join(""):`<div class="note" style="margin:0">Belum ada pengeluaran bulan ini.</div>`;
 
   // list
   const q=$("q").value.trim().toLowerCase();
@@ -290,7 +299,7 @@ $("save").onclick=()=>{
   if(editing)Object.assign(editing,rec);else S.tx.push({id:Date.now(),...rec});
   save();
   const d=new Date(rec.d+"T00:00:00");cur=new Date(d.getFullYear(),d.getMonth(),1);
-  closeAll();render();toast("Tersimpan");
+  closeAll();render();const wn=warn(rec);toast(wn||"Tersimpan");
 };
 $("del").onclick=()=>{
   lastDel=editing;S.tx=S.tx.filter(t=>t!==editing);save();closeAll();render();toast("Catatan dihapus",true);
@@ -301,19 +310,19 @@ $("prev").onclick=()=>{cur=new Date(cur.getFullYear(),cur.getMonth()-1,1);render
 $("next").onclick=()=>{cur=new Date(cur.getFullYear(),cur.getMonth()+1,1);render()};
 $("q").oninput=render;
 $("flt").onclick=e=>{const b=e.target.closest("button");if(!b)return;flt=b.dataset.f;[...$("flt").children].forEach(x=>x.classList.toggle("on",x===b));render()};
-$("btnBudget").onclick=()=>{$("budIn").value=S.budget?S.budget.toLocaleString("id-ID"):"";$("ovBud").classList.add("show")};
-$("budSave").onclick=()=>{S.budget=digits($("budIn").value);save();closeAll();render();toast("Batas disimpan")};
+$("btnBudget").onclick=()=>{$("cbList").innerHTML=CATS.out.map(c=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:118px;font-size:13px">${c[0]} ${c[1]}</span><input class="field cbi" style="margin:0" data-c="${c[1]}" inputmode="numeric" placeholder="tanpa batas" value="${S.cb[c[1]]?S.cb[c[1]].toLocaleString("id-ID"):""}"></div>`).join("");$("budIn").value=S.budget?S.budget.toLocaleString("id-ID"):"";$("ovBud").classList.add("show")};
+$("budSave").onclick=()=>{S.cb={};document.querySelectorAll(".cbi").forEach(i=>{const v=digits(i.value);if(v)S.cb[i.dataset.c]=v});S.budget=digits($("budIn").value);save();closeAll();render();toast("Batas disimpan")};
 $("btnSet").onclick=()=>{$("bk").value="";$("oRek").value=S.open.rek?S.open.rek.toLocaleString("id-ID"):"";$("oCash").value=S.open.cash?S.open.cash.toLocaleString("id-ID"):"";$("ovSet").classList.add("show")};
 $("bkCopy").onclick=async()=>{
   const j=JSON.stringify(S);$("bk").value=j;
   try{await navigator.clipboard.writeText(j);toast("Cadangan disalin")}catch(e){$("bk").select();toast("Salin teks di kotak secara manual")}
 };
 $("bkRestore").onclick=()=>{
-  try{const p=JSON.parse($("bk").value);if(!p||!Array.isArray(p.tx))throw 0;S={tx:p.tx,budget:+p.budget||0,open:p.open||{rek:0,cash:0}};S.tx.forEach(t=>{if(!t.w)t.w="rek"});save();closeAll();render();toast("Data dipulihkan")}
+  try{const p=JSON.parse($("bk").value);if(!p||!Array.isArray(p.tx))throw 0;S={tx:p.tx,budget:+p.budget||0,open:p.open||{rek:0,cash:0},cb:p.cb||{}};S.tx.forEach(t=>{if(!t.w)t.w="rek"});save();closeAll();render();toast("Data dipulihkan")}
   catch(e){toast("Kode cadangan tidak valid")}
 };
 $("bkReset").onclick=()=>{
-  if($("bkReset").dataset.sure){S={tx:[],budget:0,open:{rek:0,cash:0}};save();delete $("bkReset").dataset.sure;$("bkReset").textContent="Hapus semua data";closeAll();render();toast("Semua data dihapus")}
+  if($("bkReset").dataset.sure){S={tx:[],budget:0,open:{rek:0,cash:0},cb:{}};save();delete $("bkReset").dataset.sure;$("bkReset").textContent="Hapus semua data";closeAll();render();toast("Semua data dihapus")}
   else{$("bkReset").dataset.sure=1;$("bkReset").textContent="Ketuk lagi untuk konfirmasi"}
 };
 $("btnTheme").onclick=()=>{
@@ -321,6 +330,64 @@ $("btnTheme").onclick=()=>{
   const n=dark?"light":"dark";document.documentElement.dataset.theme=n;
   try{localStorage.setItem("kantong:theme",n)}catch(e){}
 };
+$("cbList").oninput=e=>{if(e.target.classList.contains("cbi")){const v=digits(e.target.value);e.target.value=v?v.toLocaleString("id-ID"):""}};
+function renderOver(key,mt){
+  const card=$("overCard");
+  if(!S.budget){card.style.display="none";return}
+  card.style.display="";
+  const y=cur.getFullYear(),mo=cur.getMonth(),dim=new Date(y,mo+1,0).getDate(),now=new Date();
+  const last=(y===now.getFullYear()&&mo===now.getMonth())?now.getDate():(new Date(y,mo,1)>now?0:dim);
+  const by={};mt.filter(t=>t.t==="out").forEach(t=>{const d=+t.d.slice(8);by[d]=(by[d]||0)+t.a});
+  let cum=0,cross=0;const rows=[];
+  for(let d=1;d<=last;d++){
+    const s=by[d]||0,pool=S.budget-cum,al=pool>0?pool/(dim-d+1):0;
+    if(s>0&&s>al+0.5)rows.push([d,s,al]);
+    cum+=s;
+    if(!cross&&cum>S.budget)cross=d;
+  }
+  const f=d=>d+" "+BULAN[mo].slice(0,3);
+  let h=cross?`<div class="note" style="margin:0 0 8px;color:var(--out);font-weight:700">⚠️ Batas bulanan terlewati pada ${f(cross)}</div>`:"";
+  if(!rows.length&&!cross)h=`<div class="note" style="margin:0">Belum ada hari yang melebihi jatah. Pertahankan! 🎉</div>`;
+  else{
+    h+=`<div style="max-height:280px;overflow:auto">`+rows.map(r=>`<div class="cat" style="margin:6px 0"><div class="ic" style="font-size:13px;font-weight:800">${r[0]}</div><div class="mid"><div class="nm"><span>${f(r[0])}</span><span style="color:var(--out)">${rp(r[1])}</span></div><div style="font-size:12px;color:var(--mute)">Jatah hari itu ${rp(r[2])}, lebih ${rp(r[1]-r[2])}</div></div></div>`).join("")+`</div><div class="note" style="margin:8px 0 0">Jatah tiap hari dihitung dari sisa batas ÷ sisa hari pada tanggal itu.</div>`;
+  }
+  $("overBody").innerHTML=h;
+}
+function catNote(c,v){
+  const L=S.cb[c];if(!L)return "";
+  const st="font-size:12px;color:var(--mute);margin-top:3px";
+  if(v>=L)return `<div style="${st}">Limit habis, lebih ${rp(v-L)}</div>`;
+  const now=new Date(),same=now.getFullYear()===cur.getFullYear()&&now.getMonth()===cur.getMonth();
+  const rem=same?new Date(cur.getFullYear(),cur.getMonth()+1,0).getDate()-now.getDate()+1:0;
+  return `<div style="${st}">Sisa ${rp(L-v)}${rem?", sekitar "+rp((L-v)/rem)+" per hari":""}</div>`;
+}
+function warn(r){
+  if(r.t!=="out")return "";
+  const mo=S.tx.filter(t=>t.t==="out"&&t.d.startsWith(r.d.slice(0,7))),tot=mo.reduce((a,t)=>a+t.a,0);
+  if(S.budget&&tot>=S.budget)return "⚠️ Batas pengeluaran bulan ini terlewati";
+  const L=S.cb[r.c];
+  if(L){const cv=mo.filter(t=>t.c===r.c).reduce((a,t)=>a+t.a,0);
+    if(cv>=L)return "⚠️ Limit "+r.c+" sudah habis";
+    if(cv>=L*.8)return "Hati-hati, limit "+r.c+" tinggal "+rp(L-cv)}
+  const now=new Date();
+  if(S.budget&&r.d===iso(now)){
+    const rem=new Date(now.getFullYear(),now.getMonth()+1,0).getDate()-now.getDate()+1;
+    const st=mo.filter(t=>t.d===r.d).reduce((a,t)=>a+t.a,0),al=(S.budget-(tot-st))/rem;
+    if(st>al)return "⚠️ Melewati jatah hari ini ("+rp(al)+")";
+    if(st>=al*.8)return "Jatah hari ini hampir habis, sisa "+rp(al-st)}
+  return "";
+}
+function daily(key,mt,tout){
+  const now=new Date(),nk=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
+  const dim=new Date(cur.getFullYear(),cur.getMonth()+1,0).getDate();
+  if(key!==nk)return `<div class="dly"><div class="row"><small>Jatah rata-rata per hari</small><b>${rp(S.budget/dim)}</b></div></div>`;
+  const td=iso(now),rem=dim-now.getDate()+1;
+  const st=mt.filter(t=>t.t==="out"&&t.d===td).reduce((a,t)=>a+t.a,0);
+  const pool=S.budget-(tout-st);
+  if(pool<=0)return `<div class="dly"><div class="row"><small>Jatah hari ini</small><b style="color:var(--out)">Rp0</b></div><div class="bmeta"><span>Batas bulan ini sudah habis</span></div></div>`;
+  const al=pool/rem,p=st/al,c=p>=1?"var(--out)":p>=.8?"var(--warn)":"var(--in)",lf=al-st;
+  return `<div class="dly"><div class="row"><small>Jatah hari ini</small><b>${rp(al)}</b></div><div class="bar" style="margin-top:8px"><i style="width:${Math.min(p*100,100)}%;background:${c}"></i></div><div class="bmeta"><span>Terpakai ${rp(st)}</span><span>${lf>=0?"Sisa "+rp(lf):"Lebih "+rp(-lf)}</span></div><div class="note" style="margin:6px 0 0">Dihitung dari sisa batas ÷ ${rem} hari tersisa (termasuk hari ini).</div></div>`;
+}
 function drawW(){
   [...$("wsel").children].forEach(b=>b.classList.toggle("on",b.dataset.w===curW));
   $("wlab").textContent=type==="tf"?"Pindahkan dari "+WN[curW]+" ke "+WN[curW==="cash"?"rek":"cash"]:"Dompet";
