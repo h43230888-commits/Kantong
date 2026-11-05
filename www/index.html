@@ -37,6 +37,7 @@ button{cursor:pointer;border:0;background:none}
 .bar{height:10px;border-radius:99px;background:var(--chip);overflow:hidden}
 .bar i{display:block;height:100%;border-radius:99px;background:var(--in);transition:width .4s}
 .dly{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}.dly .row{display:flex;justify-content:space-between;align-items:baseline}.dly .row small{color:var(--mute);font-weight:600}.dly b{font-size:20px;font-variant-numeric:tabular-nums}
+.cdot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:7px}
 .bmeta{display:flex;justify-content:space-between;font-size:13px;color:var(--mute);margin-top:8px}
 .cat{display:flex;align-items:center;gap:10px;margin:10px 0}
 .cat .ic{width:34px;height:34px;border-radius:11px;background:var(--chip);display:grid;place-items:center;font-size:17px;flex:none}
@@ -235,7 +236,7 @@ function render(){
   // categories
   const by={};mt.filter(t=>t.t==="out").forEach(t=>{by[t.c]=(by[t.c]||0)+t.a});
   const arr=(Object.keys(S.cb).forEach(k=>{if(!(k in by))by[k]=0}),Object.entries(by).sort((a,b)=>b[1]-a[1]));
-  $("catBody").innerHTML=arr.length?arr.map(([c,v])=>{const e=CATS.out.find(x=>x[1]===c)||["📦",c];return `<div class="cat"><div class="ic">${e[0]}</div><div class="mid"><div class="nm"><span>${esc(c)}</span><span>${rp(v)}${S.cb[c]?" / "+rp(S.cb[c]):""}</span></div><div class="bar"><i style="width:${S.cb[c]?Math.min(v/S.cb[c]*100,100):(tout?v/tout*100:0)}%;${S.cb[c]?"background:"+(v>=S.cb[c]?"var(--out)":v>=S.cb[c]*.8?"var(--warn)":"var(--in)"):""}"></i></div>${catNote(c,v)}</div></div>`}).join(""):`<div class="note" style="margin:0">Belum ada pengeluaran bulan ini.</div>`;
+  $("catBody").innerHTML=(tout>0?pie(by,tout):"")+(arr.length?arr.map(([c,v])=>{const e=CATS.out.find(x=>x[1]===c)||["📦",c];return `<div class="cat"><div class="ic">${e[0]}</div><div class="mid"><div class="nm"><span><i class="cdot" style="background:${colOf(c)}"></i>${esc(c)}${tout>0&&v>0?` <small style="color:var(--mute);font-weight:500">${Math.round(v/tout*100)}%</small>`:""}</span><span>${rp(v)}${S.cb[c]?" / "+rp(S.cb[c]):""}</span></div><div class="bar"><i style="width:${S.cb[c]?Math.min(v/S.cb[c]*100,100):(tout?v/tout*100:0)}%;${S.cb[c]?"background:"+(v>=S.cb[c]?"var(--out)":v>=S.cb[c]*.8?"var(--warn)":"var(--in)"):""}"></i></div>${catNote(c,v)}</div></div>`}).join(""):`<div class="note" style="margin:0">Belum ada pengeluaran bulan ini.</div>`);
 
   // list
   const q=$("q").value.trim().toLowerCase();
@@ -352,6 +353,14 @@ function renderOver(key,mt){
     h+=`<div style="max-height:280px;overflow:auto">`+rows.map(r=>`<div class="cat" style="margin:6px 0"><div class="ic" style="font-size:13px;font-weight:800">${r[0]}</div><div class="mid"><div class="nm"><span>${f(r[0])}</span><span style="color:var(--out)">${rp(r[1])}</span></div><div style="font-size:12px;color:var(--mute)">Jatah hari itu ${rp(r[2])}, lebih ${rp(r[1]-r[2])}</div></div></div>`).join("")+`</div><div class="note" style="margin:8px 0 0">Jatah tiap hari dihitung dari sisa batas ÷ sisa hari pada tanggal itu.</div>`;
   }
   $("overBody").innerHTML=h;
+}
+const PAL=["#e76f51","#2a9d8f","#e9c46a","#457b9d","#9b5de5","#f28482","#43aa8b","#f4a261","#577590","#b5838d"];
+const colOf=c=>{const i=CATS.out.findIndex(x=>x[1]===c);return PAL[i<0?9:i]};
+function pie(by,tout){
+  const R=42,C=2*Math.PI*R;let off=0;
+  const segs=Object.entries(by).filter(e=>e[1]>0).sort((a,b)=>b[1]-a[1]).map(([c,v])=>{
+    const len=v/tout*C,s=`<circle cx="60" cy="60" r="${R}" fill="none" stroke="${colOf(c)}" stroke-width="18" stroke-dasharray="${Math.max(len-1.5,0.1)} ${C}" stroke-dashoffset="${-off}" transform="rotate(-90 60 60)"><title>${esc(c)}: ${rp(v)}</title></circle>`;off+=len;return s});
+  return `<svg viewBox="0 0 120 120" style="display:block;margin:4px auto 12px;width:200px;max-width:70%" role="img" aria-label="Diagram pengeluaran per kategori"><circle cx="60" cy="60" r="${R}" fill="none" stroke="var(--chip)" stroke-width="18"/>${segs.join("")}<text x="60" y="56" text-anchor="middle" font-size="7" fill="var(--mute)">Total keluar</text><text x="60" y="68" text-anchor="middle" font-size="9" font-weight="800" fill="var(--ink)">${rp(tout)}</text></svg>`;
 }
 function catNote(c,v){
   const L=S.cb[c];if(!L)return "";
